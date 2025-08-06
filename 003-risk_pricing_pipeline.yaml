@@ -1,0 +1,859 @@
+# PIPELINE DEFINITION
+# Name: pipeline-de-precifica-o-de-risco-com-registro-de-modelo
+# Description: Pipeline que treina, registra e usa modelos para calcular o prêmio de risco.
+# Inputs:
+#    bq_location: str [Default: 'US']
+#    bq_table: str [Default: 'project-poc-purple.demos.dados_apolices_v1']
+#    location: str [Default: 'us-central1']
+#    model_name_prefix: str [Default: 'risk-pricing-auto-v2']
+#    project_id: str [Default: 'project-poc-purple']
+components:
+  comp-generate-summary-report:
+    executorLabel: exec-generate-summary-report
+    inputDefinitions:
+      artifacts:
+        predictions_dataset:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+    outputDefinitions:
+      artifacts:
+        output_report:
+          artifactType:
+            schemaTitle: system.Markdown
+            schemaVersion: 0.0.1
+  comp-load-data-from-bq:
+    executorLabel: exec-load-data-from-bq
+    inputDefinitions:
+      parameters:
+        bq_table:
+          parameterType: STRING
+        location:
+          parameterType: STRING
+        project_id:
+          parameterType: STRING
+    outputDefinitions:
+      artifacts:
+        output_dataset:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+  comp-predict-from-registered-models:
+    executorLabel: exec-predict-from-registered-models
+    inputDefinitions:
+      artifacts:
+        input_dataset:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+      parameters:
+        location:
+          parameterType: STRING
+        model_freq_parcial_resource_name:
+          parameterType: STRING
+        model_freq_total_resource_name:
+          parameterType: STRING
+        model_sev_parcial_resource_name:
+          parameterType: STRING
+        project_id:
+          parameterType: STRING
+    outputDefinitions:
+      artifacts:
+        output_predictions:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+  comp-train-frequency-model:
+    executorLabel: exec-train-frequency-model
+    inputDefinitions:
+      artifacts:
+        input_dataset:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+      parameters:
+        target_column:
+          parameterType: STRING
+    outputDefinitions:
+      artifacts:
+        output_model:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+  comp-train-frequency-model-2:
+    executorLabel: exec-train-frequency-model-2
+    inputDefinitions:
+      artifacts:
+        input_dataset:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+      parameters:
+        target_column:
+          parameterType: STRING
+    outputDefinitions:
+      artifacts:
+        output_model:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+  comp-train-severity-model:
+    executorLabel: exec-train-severity-model
+    inputDefinitions:
+      artifacts:
+        input_dataset:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+    outputDefinitions:
+      artifacts:
+        output_model:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+  comp-upload-and-register-model:
+    executorLabel: exec-upload-and-register-model
+    inputDefinitions:
+      artifacts:
+        model_artifact:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+      parameters:
+        location:
+          parameterType: STRING
+        model_display_name:
+          parameterType: STRING
+        project_id:
+          parameterType: STRING
+    outputDefinitions:
+      parameters:
+        Output:
+          parameterType: STRING
+  comp-upload-and-register-model-2:
+    executorLabel: exec-upload-and-register-model-2
+    inputDefinitions:
+      artifacts:
+        model_artifact:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+      parameters:
+        location:
+          parameterType: STRING
+        model_display_name:
+          parameterType: STRING
+        project_id:
+          parameterType: STRING
+    outputDefinitions:
+      parameters:
+        Output:
+          parameterType: STRING
+  comp-upload-and-register-model-3:
+    executorLabel: exec-upload-and-register-model-3
+    inputDefinitions:
+      artifacts:
+        model_artifact:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+      parameters:
+        location:
+          parameterType: STRING
+        model_display_name:
+          parameterType: STRING
+        project_id:
+          parameterType: STRING
+    outputDefinitions:
+      parameters:
+        Output:
+          parameterType: STRING
+defaultPipelineRoot: gs://000-pipelines-root_project-poc-purple/insurance_risk_pricing_pipeline/
+deploymentSpec:
+  executors:
+    exec-generate-summary-report:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - generate_summary_report
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'google-cloud-bigquery[pandas]'\
+          \ 'pandas' 'statsmodels' 'scikit-learn' 'db-dtypes' 'tabulate' 'google-cloud-aiplatform'\
+          \ 'google-cloud-storage'  &&  python3 -m pip install --quiet --no-warn-script-location\
+          \ 'kfp==2.14.1' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"\
+          3.9\"' && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef generate_summary_report(\n    predictions_dataset: Input[Dataset],\n\
+          \    output_report: Output[Markdown]\n):\n    \"\"\"Calcula m\xE9tricas\
+          \ sumarizadas e gera um relat\xF3rio de compara\xE7\xE3o.\"\"\"\n    import\
+          \ pandas as pd\n    import numpy as np\n\n    df = pd.read_csv(predictions_dataset.path)\n\
+          \n    # M\xE9tricas Realizadas\n    soma_exposicao = df['exposicao'].sum()\n\
+          \    soma_qtd_parcial = df['qtd_colisao_parcial'].sum()\n    soma_valor_parcial\
+          \ = df['valor_colisao_parcial'].sum()\n    soma_qtd_total = df['qtd_colisao_total'].sum()\n\
+          \n    freq_parcial_real = soma_qtd_parcial / soma_exposicao\n    sev_parcial_real\
+          \ = soma_valor_parcial / soma_qtd_parcial if soma_qtd_parcial > 0 else 0\n\
+          \    freq_total_real = soma_qtd_total / soma_exposicao\n    premio_risco_real\
+          \ = freq_parcial_real * sev_parcial_real + freq_total_real * np.average(df['valor_veiculo'],\
+          \ weights=df['exposicao'])\n\n    # M\xE9tricas Previstas\n    premio_risco_prev_total\
+          \ = (df['premio_risco_pred'] * df['exposicao']).sum()\n    premio_risco_prev_medio\
+          \ = premio_risco_prev_total / soma_exposicao\n\n    soma_qtd_parcial_pred\
+          \ = (df['freq_parcial_pred'] * df['exposicao']).sum()\n    soma_valor_parcial_pred\
+          \ = (df['freq_parcial_pred'] * df['exposicao'] * df['sev_parcial_pred']).sum()\n\
+          \    soma_qtd_total_pred = (df['freq_total_pred'] * df['exposicao']).sum()\n\
+          \n    freq_parcial_prev = soma_qtd_parcial_pred / soma_exposicao\n    sev_parcial_prev\
+          \ = soma_valor_parcial_pred / soma_qtd_parcial_pred if soma_qtd_parcial_pred\
+          \ > 0 else 0\n    freq_total_prev = soma_qtd_total_pred / soma_exposicao\n\
+          \    premio_risco_prev = freq_parcial_prev * sev_parcial_prev + freq_total_prev\
+          \ * np.average(df['valor_veiculo'], weights=df['exposicao'])\n\n    sumario\
+          \ = pd.DataFrame({\n        'M\xE9trica': [\n            'Frequ\xEAncia\
+          \ de Colis\xE3o Parcial',\n            'Severidade de Colis\xE3o Parcial',\n\
+          \            'Frequ\xEAncia de Colis\xE3o Total',\n            'Pr\xEAmio\
+          \ de Risco (Puro M\xE9dio)'\n        ],\n        'Valor Realizado': [\n\
+          \            freq_parcial_real,\n            sev_parcial_real,\n       \
+          \     freq_total_real,\n            premio_risco_real\n        ],\n    \
+          \    'Valor Previsto pelo Modelo': [\n            freq_parcial_prev,\n \
+          \           sev_parcial_prev,\n            freq_total_prev,\n          \
+          \  premio_risco_prev\n        ]\n    })\n\n    # Gerando o relat\xF3rio\
+          \ em Markdown\n    markdown_report = \"# Relat\xF3rio de Compara\xE7\xE3\
+          o Real x Previsto\\n\\n\"\n    markdown_report += sumario.to_markdown(index=False)\n\
+          \n    with open(output_report.path, 'w') as f:\n        f.write(markdown_report)\n\
+          \n    print(\"Relat\xF3rio gerado com sucesso!\")\n    print(\"RELAT\xD3\
+          RIO DE COMPARA\xC7\xC3O REAL X PREVISTO\")\n    print(\"=\"*75)\n    print(sumario.to_string(index=False))\n\
+          \    print(\"=\"*75)\n\n"
+        image: python:3.9
+    exec-load-data-from-bq:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - load_data_from_bq
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'google-cloud-bigquery[pandas]'\
+          \ 'pandas' 'statsmodels' 'scikit-learn' 'db-dtypes' 'tabulate' 'google-cloud-aiplatform'\
+          \ 'google-cloud-storage'  &&  python3 -m pip install --quiet --no-warn-script-location\
+          \ 'kfp==2.14.1' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"\
+          3.9\"' && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef load_data_from_bq(\n    project_id: str,\n    location: str,\n\
+          \    bq_table: str,\n    output_dataset: Output[Dataset]\n):\n    \"\"\"\
+          Carrega dados de uma tabela do BigQuery e salva como um arquivo CSV.\"\"\
+          \"\n    from google.cloud import bigquery\n    import pandas as pd\n\n \
+          \   client = bigquery.Client(project=project_id, location=location)\n\n\
+          \    print(f\"Lendo dados da tabela {bq_table}...\")\n    sql_query = f\"\
+          SELECT * FROM `{bq_table}`\"\n    df = client.query(sql_query).to_dataframe()\n\
+          \n    print(\"Ajuste formato colunas\")\n    colunas_para_converter = df.select_dtypes(include='Int64').columns\n\
+          \    for col in colunas_para_converter:\n        df[col] = df[col].astype('int64')\n\
+          \n    print(\"\u2705 Sucesso! Dados carregados no DataFrame.\")\n    print(df.head())\n\
+          \n    # Salva o dataframe como um arquivo CSV, que \xE9 o artefato de sa\xED\
+          da.\n    df.to_csv(output_dataset.path, index=False)\n    print(f\"Dataset\
+          \ salvo em: {output_dataset.path}\")\n\n"
+        image: python:3.9
+    exec-predict-from-registered-models:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - predict_from_registered_models
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'google-cloud-bigquery[pandas]'\
+          \ 'pandas' 'statsmodels' 'scikit-learn' 'db-dtypes' 'tabulate' 'google-cloud-aiplatform'\
+          \ 'google-cloud-storage'  &&  python3 -m pip install --quiet --no-warn-script-location\
+          \ 'kfp==2.14.1' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"\
+          3.9\"' && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef predict_from_registered_models(\n    project_id: str,\n    location:\
+          \ str,\n    input_dataset: Input[Dataset],\n    model_freq_parcial_resource_name:\
+          \ str,\n    model_freq_total_resource_name: str,\n    model_sev_parcial_resource_name:\
+          \ str,\n    output_predictions: Output[Dataset]\n):\n    \"\"\"Carrega modelos\
+          \ registrados, aplica predi\xE7\xF5es e calcula o pr\xEAmio.\"\"\"\n   \
+          \ import pandas as pd\n    import numpy as np\n    import joblib\n    import\
+          \ statsmodels.api as sm\n    from google.cloud import aiplatform, storage\n\
+          \    import os\n\n    df = pd.read_csv(input_dataset.path)\n    aiplatform.init(project=project_id,\
+          \ location=location)\n\n    def download_and_load_model(model_resource_name:\
+          \ str) -> any:\n        \"\"\"Baixa um modelo via Model Registry e o carrega.\"\
+          \"\"\n        print(f\"Carregando modelo do resource name: {model_resource_name}\"\
+          )\n        model = aiplatform.Model(model_name=model_resource_name)\n  \
+          \      model_artifact_dir = model.uri\n        print(f\"URI do artefato\
+          \ do modelo: {model_artifact_dir}\")\n\n        model_file_gcs_path = f\"\
+          {model_artifact_dir}/model.joblib\"\n        local_model_file = f\"/tmp/{model_resource_name.split('/')[-1]}.joblib\"\
+          \n\n        path_parts = model_file_gcs_path.replace(\"gs://\", \"\").split('/')\n\
+          \        bucket_name = path_parts[0]\n        object_name = '/'.join(path_parts[1:])\n\
+          \n        storage_client = storage.Client(project=project_id)\n        bucket\
+          \ = storage_client.bucket(bucket_name)\n        blob = bucket.blob(object_name)\n\
+          \        blob.download_to_filename(local_model_file)\n        print(f\"\
+          Modelo baixado para {local_model_file}\")\n\n        return joblib.load(local_model_file)\n\
+          \n    # Carrega os modelos a partir do Registry\n    results_freq_parcial\
+          \ = download_and_load_model(model_freq_parcial_resource_name)\n    results_freq_total\
+          \ = download_and_load_model(model_freq_total_resource_name)\n    results_sev_parcial\
+          \ = download_and_load_model(model_sev_parcial_resource_name)\n    print(\"\
+          Modelos carregados com sucesso do Registry.\")\n\n    # Predi\xE7\xE3o da\
+          \ Frequ\xEAncia (vers\xE3o corrigida, sem o np.exp extra)\n    df['freq_parcial_pred']\
+          \ = results_freq_parcial.predict(sm.add_constant(df[['classe_bonus', 'idade',\
+          \ 'rns']]))\n    df['freq_total_pred'] = results_freq_total.predict(sm.add_constant(df[['classe_bonus',\
+          \ 'idade', 'rns']]))\n\n    # Predi\xE7\xE3o da Severidade (vers\xE3o corrigida)\n\
+          \    df['sev_parcial_pred'] = results_sev_parcial.predict(sm.add_constant(df[['classe_bonus',\
+          \ 'idade', 'rns', 'valor_veiculo']]))\n\n    # C\xE1lculo do Pr\xEAmio de\
+          \ Risco\n    df['premio_risco_pred'] = (\n        df['freq_parcial_pred']\
+          \ * df['sev_parcial_pred'] +\n        df['freq_total_pred'] * df['valor_veiculo']\n\
+          \    )\n\n    print(\"C\xE1lculos finalizados. Salvando predi\xE7\xF5es.\"\
+          )\n    df.to_csv(output_predictions.path, index=False)\n    print(df[['valor_veiculo',\
+          \ 'freq_parcial_pred', 'sev_parcial_pred', 'freq_total_pred', 'premio_risco_pred']].head())\n\
+          \n"
+        image: python:3.9
+    exec-train-frequency-model:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - train_frequency_model
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'google-cloud-bigquery[pandas]'\
+          \ 'pandas' 'statsmodels' 'scikit-learn' 'db-dtypes' 'tabulate' 'google-cloud-aiplatform'\
+          \ 'google-cloud-storage'  &&  python3 -m pip install --quiet --no-warn-script-location\
+          \ 'kfp==2.14.1' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"\
+          3.9\"' && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef train_frequency_model(\n    input_dataset: Input[Dataset],\n\
+          \    target_column: str, # 'qtd_colisao_parcial' ou 'qtd_colisao_total'\n\
+          \    output_model: Output[Model]\n):\n    \"\"\"Treina um modelo GLM Poisson\
+          \ para frequ\xEAncia de sinistros.\"\"\"\n    import pandas as pd\n    import\
+          \ numpy as np\n    import statsmodels.api as sm\n    import joblib\n\n \
+          \   df = pd.read_csv(input_dataset.path)\n\n    print(f\"Treinando modelo\
+          \ de frequ\xEAncia para a coluna: {target_column}\")\n\n    features_freq\
+          \ = ['classe_bonus', 'idade', 'rns']\n    X_freq = sm.add_constant(df[features_freq])\n\
+          \n    model = sm.GLM(\n        endog=df[target_column],\n        exog=X_freq,\n\
+          \        family=sm.families.Poisson(),\n        offset=np.log(df['exposicao'])\n\
+          \    )\n    results = model.fit()\n\n    # Salva o modelo treinado usando\
+          \ joblib\n    joblib.dump(results, output_model.path)\n    print(f\"Modelo\
+          \ de frequ\xEAncia salvo em: {output_model.path}\")\n    print(results.summary())\n\
+          \n"
+        image: python:3.9
+    exec-train-frequency-model-2:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - train_frequency_model
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'google-cloud-bigquery[pandas]'\
+          \ 'pandas' 'statsmodels' 'scikit-learn' 'db-dtypes' 'tabulate' 'google-cloud-aiplatform'\
+          \ 'google-cloud-storage'  &&  python3 -m pip install --quiet --no-warn-script-location\
+          \ 'kfp==2.14.1' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"\
+          3.9\"' && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef train_frequency_model(\n    input_dataset: Input[Dataset],\n\
+          \    target_column: str, # 'qtd_colisao_parcial' ou 'qtd_colisao_total'\n\
+          \    output_model: Output[Model]\n):\n    \"\"\"Treina um modelo GLM Poisson\
+          \ para frequ\xEAncia de sinistros.\"\"\"\n    import pandas as pd\n    import\
+          \ numpy as np\n    import statsmodels.api as sm\n    import joblib\n\n \
+          \   df = pd.read_csv(input_dataset.path)\n\n    print(f\"Treinando modelo\
+          \ de frequ\xEAncia para a coluna: {target_column}\")\n\n    features_freq\
+          \ = ['classe_bonus', 'idade', 'rns']\n    X_freq = sm.add_constant(df[features_freq])\n\
+          \n    model = sm.GLM(\n        endog=df[target_column],\n        exog=X_freq,\n\
+          \        family=sm.families.Poisson(),\n        offset=np.log(df['exposicao'])\n\
+          \    )\n    results = model.fit()\n\n    # Salva o modelo treinado usando\
+          \ joblib\n    joblib.dump(results, output_model.path)\n    print(f\"Modelo\
+          \ de frequ\xEAncia salvo em: {output_model.path}\")\n    print(results.summary())\n\
+          \n"
+        image: python:3.9
+    exec-train-severity-model:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - train_severity_model
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'google-cloud-bigquery[pandas]'\
+          \ 'pandas' 'statsmodels' 'scikit-learn' 'db-dtypes' 'tabulate' 'google-cloud-aiplatform'\
+          \ 'google-cloud-storage'  &&  python3 -m pip install --quiet --no-warn-script-location\
+          \ 'kfp==2.14.1' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"\
+          3.9\"' && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef train_severity_model(\n    input_dataset: Input[Dataset],\n \
+          \   output_model: Output[Model]\n):\n    \"\"\"Treina um modelo GLM Gamma\
+          \ para severidade de sinistros parciais.\"\"\"\n    import pandas as pd\n\
+          \    import statsmodels.api as sm\n    import joblib\n\n    df = pd.read_csv(input_dataset.path)\n\
+          \n    print(\"Treinando modelo de severidade...\")\n\n    df_com_sinistro\
+          \ = df[df['valor_colisao_parcial'] > 0].copy()\n    y_sev = df_com_sinistro['valor_colisao_parcial']\
+          \ / df_com_sinistro['qtd_colisao_parcial']\n\n    features_sev = ['classe_bonus',\
+          \ 'idade', 'rns', 'valor_veiculo']\n    X_sev_com_sinistro = sm.add_constant(df_com_sinistro[features_sev])\n\
+          \n    model = sm.GLM(\n        endog=y_sev,\n        exog=X_sev_com_sinistro,\n\
+          \        family=sm.families.Gamma(link=sm.families.links.Log())\n    )\n\
+          \    results = model.fit()\n    print(results.summary())\n\n    joblib.dump(results,\
+          \ output_model.path)\n    print(f\"Modelo de severidade salvo em: {output_model.path}\"\
+          )\n    print(results.summary())\n\n"
+        image: python:3.9
+    exec-upload-and-register-model:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - upload_and_register_model
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'google-cloud-bigquery[pandas]'\
+          \ 'pandas' 'statsmodels' 'scikit-learn' 'db-dtypes' 'tabulate' 'google-cloud-aiplatform'\
+          \ 'google-cloud-storage'  &&  python3 -m pip install --quiet --no-warn-script-location\
+          \ 'kfp==2.14.1' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"\
+          3.9\"' && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef upload_and_register_model(\n    project_id: str,\n    location:\
+          \ str,\n    model_display_name: str,\n    model_artifact: Input[Model],\n\
+          ) -> str:  # MUDAN\xC7A 1: Declara o retorno de uma string\n    \"\"\"Faz\
+          \ o upload de um artefato de modelo e retorna seu resource name.\"\"\"\n\
+          \    from google.cloud import aiplatform, storage\n    import os\n\n   \
+          \ SERVING_IMAGE = \"us-docker.pkg.dev/vertex-ai/prediction/sklearn-cpu.1-1:latest\"\
+          \n    aiplatform.init(project=project_id, location=location)\n\n    gcs_path\
+          \ = model_artifact.uri\n    path_parts = gcs_path.replace(\"gs://\", \"\"\
+          ).split('/')\n    bucket_name = path_parts[0]\n    object_prefix = '/'.join(path_parts[1:])\n\
+          \    model_upload_dir = os.path.dirname(object_prefix)\n    new_file_name\
+          \ = \"model.joblib\"\n    new_object_path = f\"{model_upload_dir}/{new_file_name}\"\
+          \n\n    storage_client = storage.Client(project=project_id)\n    source_bucket\
+          \ = storage_client.bucket(bucket_name)\n    source_blob = source_bucket.blob(object_prefix)\n\
+          \    source_bucket.copy_blob(source_blob, source_bucket, new_object_path)\n\
+          \    print(f\"Artefato do modelo copiado para: gs://{bucket_name}/{new_object_path}\"\
+          )\n\n    artifact_uri_for_upload = f\"gs://{bucket_name}/{model_upload_dir}\"\
+          \n    print(f\"Registrando o modelo '{model_display_name}' do diret\xF3\
+          rio {artifact_uri_for_upload}...\")\n\n    model = aiplatform.Model.upload(\n\
+          \        display_name=model_display_name,\n        artifact_uri=artifact_uri_for_upload,\n\
+          \        serving_container_image_uri=SERVING_IMAGE,\n        description=f\"\
+          Modelo de precifica\xE7\xE3o de risco: {model_display_name}\",\n    )\n\
+          \    model.wait()\n\n    resource_name = model.resource_name\n    print(f\"\
+          \u2705 Modelo registrado! Resource Name: {resource_name}\")\n\n    # MUDAN\xC7\
+          A 2: Retorna a string diretamente\n    return resource_name\n\n"
+        image: python:3.9
+    exec-upload-and-register-model-2:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - upload_and_register_model
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'google-cloud-bigquery[pandas]'\
+          \ 'pandas' 'statsmodels' 'scikit-learn' 'db-dtypes' 'tabulate' 'google-cloud-aiplatform'\
+          \ 'google-cloud-storage'  &&  python3 -m pip install --quiet --no-warn-script-location\
+          \ 'kfp==2.14.1' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"\
+          3.9\"' && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef upload_and_register_model(\n    project_id: str,\n    location:\
+          \ str,\n    model_display_name: str,\n    model_artifact: Input[Model],\n\
+          ) -> str:  # MUDAN\xC7A 1: Declara o retorno de uma string\n    \"\"\"Faz\
+          \ o upload de um artefato de modelo e retorna seu resource name.\"\"\"\n\
+          \    from google.cloud import aiplatform, storage\n    import os\n\n   \
+          \ SERVING_IMAGE = \"us-docker.pkg.dev/vertex-ai/prediction/sklearn-cpu.1-1:latest\"\
+          \n    aiplatform.init(project=project_id, location=location)\n\n    gcs_path\
+          \ = model_artifact.uri\n    path_parts = gcs_path.replace(\"gs://\", \"\"\
+          ).split('/')\n    bucket_name = path_parts[0]\n    object_prefix = '/'.join(path_parts[1:])\n\
+          \    model_upload_dir = os.path.dirname(object_prefix)\n    new_file_name\
+          \ = \"model.joblib\"\n    new_object_path = f\"{model_upload_dir}/{new_file_name}\"\
+          \n\n    storage_client = storage.Client(project=project_id)\n    source_bucket\
+          \ = storage_client.bucket(bucket_name)\n    source_blob = source_bucket.blob(object_prefix)\n\
+          \    source_bucket.copy_blob(source_blob, source_bucket, new_object_path)\n\
+          \    print(f\"Artefato do modelo copiado para: gs://{bucket_name}/{new_object_path}\"\
+          )\n\n    artifact_uri_for_upload = f\"gs://{bucket_name}/{model_upload_dir}\"\
+          \n    print(f\"Registrando o modelo '{model_display_name}' do diret\xF3\
+          rio {artifact_uri_for_upload}...\")\n\n    model = aiplatform.Model.upload(\n\
+          \        display_name=model_display_name,\n        artifact_uri=artifact_uri_for_upload,\n\
+          \        serving_container_image_uri=SERVING_IMAGE,\n        description=f\"\
+          Modelo de precifica\xE7\xE3o de risco: {model_display_name}\",\n    )\n\
+          \    model.wait()\n\n    resource_name = model.resource_name\n    print(f\"\
+          \u2705 Modelo registrado! Resource Name: {resource_name}\")\n\n    # MUDAN\xC7\
+          A 2: Retorna a string diretamente\n    return resource_name\n\n"
+        image: python:3.9
+    exec-upload-and-register-model-3:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - upload_and_register_model
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'google-cloud-bigquery[pandas]'\
+          \ 'pandas' 'statsmodels' 'scikit-learn' 'db-dtypes' 'tabulate' 'google-cloud-aiplatform'\
+          \ 'google-cloud-storage'  &&  python3 -m pip install --quiet --no-warn-script-location\
+          \ 'kfp==2.14.1' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"\
+          3.9\"' && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef upload_and_register_model(\n    project_id: str,\n    location:\
+          \ str,\n    model_display_name: str,\n    model_artifact: Input[Model],\n\
+          ) -> str:  # MUDAN\xC7A 1: Declara o retorno de uma string\n    \"\"\"Faz\
+          \ o upload de um artefato de modelo e retorna seu resource name.\"\"\"\n\
+          \    from google.cloud import aiplatform, storage\n    import os\n\n   \
+          \ SERVING_IMAGE = \"us-docker.pkg.dev/vertex-ai/prediction/sklearn-cpu.1-1:latest\"\
+          \n    aiplatform.init(project=project_id, location=location)\n\n    gcs_path\
+          \ = model_artifact.uri\n    path_parts = gcs_path.replace(\"gs://\", \"\"\
+          ).split('/')\n    bucket_name = path_parts[0]\n    object_prefix = '/'.join(path_parts[1:])\n\
+          \    model_upload_dir = os.path.dirname(object_prefix)\n    new_file_name\
+          \ = \"model.joblib\"\n    new_object_path = f\"{model_upload_dir}/{new_file_name}\"\
+          \n\n    storage_client = storage.Client(project=project_id)\n    source_bucket\
+          \ = storage_client.bucket(bucket_name)\n    source_blob = source_bucket.blob(object_prefix)\n\
+          \    source_bucket.copy_blob(source_blob, source_bucket, new_object_path)\n\
+          \    print(f\"Artefato do modelo copiado para: gs://{bucket_name}/{new_object_path}\"\
+          )\n\n    artifact_uri_for_upload = f\"gs://{bucket_name}/{model_upload_dir}\"\
+          \n    print(f\"Registrando o modelo '{model_display_name}' do diret\xF3\
+          rio {artifact_uri_for_upload}...\")\n\n    model = aiplatform.Model.upload(\n\
+          \        display_name=model_display_name,\n        artifact_uri=artifact_uri_for_upload,\n\
+          \        serving_container_image_uri=SERVING_IMAGE,\n        description=f\"\
+          Modelo de precifica\xE7\xE3o de risco: {model_display_name}\",\n    )\n\
+          \    model.wait()\n\n    resource_name = model.resource_name\n    print(f\"\
+          \u2705 Modelo registrado! Resource Name: {resource_name}\")\n\n    # MUDAN\xC7\
+          A 2: Retorna a string diretamente\n    return resource_name\n\n"
+        image: python:3.9
+pipelineInfo:
+  description: "Pipeline que treina, registra e usa modelos para calcular o pr\xEA\
+    mio de risco."
+  name: pipeline-de-precifica-o-de-risco-com-registro-de-modelo
+root:
+  dag:
+    tasks:
+      generate-summary-report:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-generate-summary-report
+        dependentTasks:
+        - predict-from-registered-models
+        inputs:
+          artifacts:
+            predictions_dataset:
+              taskOutputArtifact:
+                outputArtifactKey: output_predictions
+                producerTask: predict-from-registered-models
+        taskInfo:
+          name: generate-summary-report
+      load-data-from-bq:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-load-data-from-bq
+        inputs:
+          parameters:
+            bq_table:
+              componentInputParameter: bq_table
+            location:
+              componentInputParameter: bq_location
+            project_id:
+              componentInputParameter: project_id
+        taskInfo:
+          name: load-data-from-bq
+      predict-from-registered-models:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-predict-from-registered-models
+        dependentTasks:
+        - load-data-from-bq
+        - upload-and-register-model
+        - upload-and-register-model-2
+        - upload-and-register-model-3
+        inputs:
+          artifacts:
+            input_dataset:
+              taskOutputArtifact:
+                outputArtifactKey: output_dataset
+                producerTask: load-data-from-bq
+          parameters:
+            location:
+              componentInputParameter: location
+            model_freq_parcial_resource_name:
+              taskOutputParameter:
+                outputParameterKey: Output
+                producerTask: upload-and-register-model
+            model_freq_total_resource_name:
+              taskOutputParameter:
+                outputParameterKey: Output
+                producerTask: upload-and-register-model-2
+            model_sev_parcial_resource_name:
+              taskOutputParameter:
+                outputParameterKey: Output
+                producerTask: upload-and-register-model-3
+            project_id:
+              componentInputParameter: project_id
+        taskInfo:
+          name: predict-from-registered-models
+      train-frequency-model:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-train-frequency-model
+        dependentTasks:
+        - load-data-from-bq
+        inputs:
+          artifacts:
+            input_dataset:
+              taskOutputArtifact:
+                outputArtifactKey: output_dataset
+                producerTask: load-data-from-bq
+          parameters:
+            target_column:
+              runtimeValue:
+                constant: qtd_colisao_parcial
+        taskInfo:
+          name: train-frequency-model
+      train-frequency-model-2:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-train-frequency-model-2
+        dependentTasks:
+        - load-data-from-bq
+        inputs:
+          artifacts:
+            input_dataset:
+              taskOutputArtifact:
+                outputArtifactKey: output_dataset
+                producerTask: load-data-from-bq
+          parameters:
+            target_column:
+              runtimeValue:
+                constant: qtd_colisao_total
+        taskInfo:
+          name: train-frequency-model-2
+      train-severity-model:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-train-severity-model
+        dependentTasks:
+        - load-data-from-bq
+        inputs:
+          artifacts:
+            input_dataset:
+              taskOutputArtifact:
+                outputArtifactKey: output_dataset
+                producerTask: load-data-from-bq
+        taskInfo:
+          name: train-severity-model
+      upload-and-register-model:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-upload-and-register-model
+        dependentTasks:
+        - train-frequency-model
+        inputs:
+          artifacts:
+            model_artifact:
+              taskOutputArtifact:
+                outputArtifactKey: output_model
+                producerTask: train-frequency-model
+          parameters:
+            location:
+              componentInputParameter: location
+            model_display_name:
+              runtimeValue:
+                constant: '{{$.inputs.parameters[''pipelinechannel--model_name_prefix'']}}-freq-parcial'
+            pipelinechannel--model_name_prefix:
+              componentInputParameter: model_name_prefix
+            project_id:
+              componentInputParameter: project_id
+        taskInfo:
+          name: upload-and-register-model
+      upload-and-register-model-2:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-upload-and-register-model-2
+        dependentTasks:
+        - train-frequency-model-2
+        inputs:
+          artifacts:
+            model_artifact:
+              taskOutputArtifact:
+                outputArtifactKey: output_model
+                producerTask: train-frequency-model-2
+          parameters:
+            location:
+              componentInputParameter: location
+            model_display_name:
+              runtimeValue:
+                constant: '{{$.inputs.parameters[''pipelinechannel--model_name_prefix'']}}-freq-total'
+            pipelinechannel--model_name_prefix:
+              componentInputParameter: model_name_prefix
+            project_id:
+              componentInputParameter: project_id
+        taskInfo:
+          name: upload-and-register-model-2
+      upload-and-register-model-3:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-upload-and-register-model-3
+        dependentTasks:
+        - train-severity-model
+        inputs:
+          artifacts:
+            model_artifact:
+              taskOutputArtifact:
+                outputArtifactKey: output_model
+                producerTask: train-severity-model
+          parameters:
+            location:
+              componentInputParameter: location
+            model_display_name:
+              runtimeValue:
+                constant: '{{$.inputs.parameters[''pipelinechannel--model_name_prefix'']}}-sev-parcial'
+            pipelinechannel--model_name_prefix:
+              componentInputParameter: model_name_prefix
+            project_id:
+              componentInputParameter: project_id
+        taskInfo:
+          name: upload-and-register-model-3
+  inputDefinitions:
+    parameters:
+      bq_location:
+        defaultValue: US
+        isOptional: true
+        parameterType: STRING
+      bq_table:
+        defaultValue: project-poc-purple.demos.dados_apolices_v1
+        isOptional: true
+        parameterType: STRING
+      location:
+        defaultValue: us-central1
+        isOptional: true
+        parameterType: STRING
+      model_name_prefix:
+        defaultValue: risk-pricing-auto-v2
+        isOptional: true
+        parameterType: STRING
+      project_id:
+        defaultValue: project-poc-purple
+        isOptional: true
+        parameterType: STRING
+schemaVersion: 2.1.0
+sdkVersion: kfp-2.14.1
